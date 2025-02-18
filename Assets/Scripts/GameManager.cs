@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEngine;
+using System.Linq;
 using TMPro;
 
 public class GameManager : MonoBehaviour
@@ -12,6 +13,7 @@ public class GameManager : MonoBehaviour
     public GameObject token;
     private int[,] GameMatrix; //0 not chosen, 1 player, 2 enemy de momento no hago nada con esto
     private Node[,] NodeMatrix;
+    private GameObject[,] CircleMatrix;
     public int startPosx, startPosy;
     public int endPosx, endPosy;
     void Awake()
@@ -41,6 +43,7 @@ public class GameManager : MonoBehaviour
         //GameMatrix[startPosx, startPosy] = 2;
         //GameMatrix[startPosx, startPosy] = 1;
         NodeMatrix = new Node[Size, Size];
+        CircleMatrix = new GameObject[Size, Size];
         CreateNodes();
     }
     public void CreateNodes()
@@ -61,26 +64,78 @@ public class GameManager : MonoBehaviour
             }
         }
         DebugMatrix();
-        SearchWay();
+        StartCoroutine(SearchWay());
     }
 
-    public void SearchWay() 
+    public IEnumerator SearchWay()
     {
-
         Node startingNode = NodeMatrix[startPosx, startPosy];
+        Node currentNode = startingNode;
 
-        List<Node> openList = new List<Node>();
+        Dictionary<Node, float> openList = new Dictionary<Node, float>();
         List<Node> closedList = new List<Node>();
 
-        for (int i = 0; i < startingNode.WayList.Count; i++)
+        openList.Add(startingNode, startingNode.Heuristic);
+        startingNode.acumulatedCost = 0;
+
+        while (openList.Count > 0)
         {
 
-            Debug.Log(startingNode.WayList[i].NodeDestiny.RealPosition + " - " + startingNode.WayList[i].Cost);
+            yield return new WaitForSeconds(0.1f);
+
+            float optimalWay = openList.Values.Min();
+            Node nextNode = openList.FirstOrDefault(x => x.Value == optimalWay).Key;
+
+            // Remove from open list and add to closed list
+            openList.Remove(nextNode);
+            closedList.Add(nextNode);
+
+            // Reached the end
+            if (nextNode.Heuristic == 0)
+            {
+                CircleMatrix[nextNode.PositionX, nextNode.PositionY].GetComponent<SpriteRenderer>().color = Color.cyan;
+                StartCoroutine(ShowWay());
+                yield break;
+            }
+
+            // Updates the open list
+            foreach (var way in nextNode.WayList)
+            {
+                Node wayNode = way.NodeDestiny;
+                float newCost = nextNode.acumulatedCost + way.Cost;
+
+                if (!closedList.Contains(wayNode)) 
+                {
+                    if (!openList.ContainsKey(wayNode) || newCost < wayNode.acumulatedCost)
+                    {
+                        wayNode.acumulatedCost = newCost;
+                        wayNode.NodeParent = nextNode;
+                        openList[wayNode] = newCost + wayNode.Heuristic;
+                    }
+                }
+
+            }
+
+            if (nextNode != startingNode)
+            {
+                CircleMatrix[nextNode.PositionX, nextNode.PositionY].GetComponent<SpriteRenderer>().color = Color.blue;
+            }
 
         }
-
-
     }
+
+    private IEnumerator ShowWay()
+    {
+        Node currentNode = NodeMatrix[endPosx, endPosy];
+
+        while (currentNode.NodeParent != null)
+        {
+            yield return new WaitForSeconds(0.1f);
+            CircleMatrix[currentNode.PositionX, currentNode.PositionY].GetComponent<SpriteRenderer>().color = Color.yellow;
+            currentNode = currentNode.NodeParent;
+        }
+    }
+
 
     public void DebugMatrix()
     {
@@ -89,7 +144,8 @@ public class GameManager : MonoBehaviour
             for (int j = 0; j < Size; j++)
             {
                 GameObject circle = Instantiate(token, NodeMatrix[i, j].RealPosition, Quaternion.identity);
-                
+                CircleMatrix[i, j] = circle;
+
                 circle.GetComponentInChildren<TextMeshPro>().text = (Mathf.Round(NodeMatrix[i, j].Heuristic * 100f) / 100f).ToString();
 
                 if (i == startPosx && j == startPosy)

@@ -10,6 +10,7 @@ public class Node
     private Vector2 _realPosition;
     private Node _nodeParent;
     private List<Way> _wayList;
+    public float acumulatedCost;
     #endregion
 
     #region getters and setters
